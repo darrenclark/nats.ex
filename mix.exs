@@ -33,7 +33,9 @@ defmodule Gnat.Mixfile do
       {:jason, "~> 1.1"},
       {:nimble_parsec, "~> 0.5"},
       {:propcheck, "~> 1.0", only: :test},
-      {:telemetry, "~> 0.4"}
+      {:telemetry, "~> 0.4"},
+      {:protobuf, "~> 0.7.0"},
+      {:google_protos, "~> 0.1.0"}
     ]
   end
 

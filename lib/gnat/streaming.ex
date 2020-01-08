@@ -1,16 +1,18 @@
-defmodule Stan do
+defmodule Gnat.Streaming do
   use GenServer
+
+  alias Gnat.Streaming.Subscription
 
   def start_link(opts) do
     genserver_opts = Keyword.take(opts, [:name])
     GenServer.start_link(__MODULE__, Map.new(opts), genserver_opts)
   end
 
-  def pub(stan, subject, body) do
-    GenServer.call(stan, {:pub, subject, body})
+  def pub(server, subject, body) do
+    GenServer.call(server, {:pub, subject, body})
   end
 
-  def sub(stan, subscriber, subject, opts \\ []) do
+  def sub(server, subscriber, subject, opts \\ []) do
     opts =
       [
         queue_group: nil,
@@ -24,19 +26,19 @@ defmodule Stan do
       |> Keyword.merge(opts)
       |> Map.new()
 
-    GenServer.call(stan, {:sub, subscriber, subject, opts})
+    GenServer.call(server, {:sub, subscriber, subject, opts})
   end
 
-  def unsub(stan, subscription) do
-    GenServer.call(stan, {:unsub, :unsub, subscription})
+  def unsub(server, subscription) do
+    GenServer.call(server, {:unsub, :unsub, subscription})
   end
 
-  def close(stan, subscription) do
-    GenServer.call(stan, {:unsub, :close, subscription})
+  def close(server, subscription) do
+    GenServer.call(server, {:unsub, :close, subscription})
   end
 
-  def ack(stan, ack) do
-    GenServer.call(stan, {:ack, ack})
+  def ack(server, ack) do
+    GenServer.call(server, {:ack, ack})
   end
 
   @impl true
@@ -127,7 +129,7 @@ defmodule Stan do
     )
 
     {:ok, resp} = request(state.gnat, state.topic_sub, req)
-    sub = Stan.Sub.new(req, resp, gnat_sub, subscriber)
+    sub = Subscription.new(req, resp, gnat_sub, subscriber)
 
     state = %{state | subscriptions: Map.put(state.subscriptions, inbox, sub)}
 

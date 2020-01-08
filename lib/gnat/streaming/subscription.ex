@@ -1,4 +1,4 @@
-defmodule Stan.Sub do
+defmodule Gnat.Streaming.Subscription do
 
   defstruct [
     :inbox,
@@ -14,7 +14,7 @@ defmodule Stan.Sub do
   alias Pb.SubscriptionResponse, as: SubResp
 
   def new(%SubReq{} = sub_req, %SubResp{error: ""} = sub_resp, gnat_sub, pid) do
-    %Sub{
+    %Subscription{
       inbox: sub_req.inbox,
       ack_inbox: sub_resp.ackInbox,
       subject: sub_req.subject,
