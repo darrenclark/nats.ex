@@ -1,7 +1,7 @@
 defmodule Gnat.Streaming do
   use GenServer
 
-  alias Gnat.Streaming.Subscription
+  alias Gnat.Streaming.{Pb, Subscription}
 
   def start_link(opts) do
     genserver_opts = Keyword.take(opts, [:name])

@@ -10,8 +10,8 @@ defmodule Gnat.Streaming.Subscription do
   ]
 
   alias __MODULE__
-  alias Pb.SubscriptionRequest, as: SubReq
-  alias Pb.SubscriptionResponse, as: SubResp
+  alias Gnat.Streaming.Pb.SubscriptionRequest, as: SubReq
+  alias Gnat.Streaming.Pb.SubscriptionResponse, as: SubResp
 
   def new(%SubReq{} = sub_req, %SubResp{error: ""} = sub_resp, gnat_sub, pid) do
     %Subscription{

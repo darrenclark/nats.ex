@@ -1,4 +1,4 @@
-defmodule Pb.StartPosition do
+defmodule Gnat.Streaming.Pb.StartPosition do
   @moduledoc false
   use Protobuf, enum: true, syntax: :proto3
 
@@ -9,7 +9,7 @@ defmodule Pb.StartPosition do
   field :First, 4
 end
 
-defmodule Pb.PubMsg do
+defmodule Gnat.Streaming.Pb.PubMsg do
   @moduledoc false
   use Protobuf, syntax: :proto3
 
@@ -33,7 +33,7 @@ defmodule Pb.PubMsg do
   field :sha256, 10, type: :bytes
 end
 
-defmodule Pb.PubAck do
+defmodule Gnat.Streaming.Pb.PubAck do
   @moduledoc false
   use Protobuf, syntax: :proto3
 
@@ -47,7 +47,7 @@ defmodule Pb.PubAck do
   field :error, 2, type: :string
 end
 
-defmodule Pb.MsgProto do
+defmodule Gnat.Streaming.Pb.MsgProto do
   @moduledoc false
   use Protobuf, syntax: :proto3
 
@@ -82,7 +82,7 @@ defmodule Pb.MsgProto do
   field :CRC32, 10, type: :uint32
 end
 
-defmodule Pb.Ack do
+defmodule Gnat.Streaming.Pb.Ack do
   @moduledoc false
   use Protobuf, syntax: :proto3
 
@@ -96,7 +96,7 @@ defmodule Pb.Ack do
   field :sequence, 2, type: :uint64
 end
 
-defmodule Pb.ConnectRequest do
+defmodule Gnat.Streaming.Pb.ConnectRequest do
   @moduledoc false
   use Protobuf, syntax: :proto3
 
@@ -118,7 +118,7 @@ defmodule Pb.ConnectRequest do
   field :pingMaxOut, 6, type: :int32
 end
 
-defmodule Pb.ConnectResponse do
+defmodule Gnat.Streaming.Pb.ConnectResponse do
   @moduledoc false
   use Protobuf, syntax: :proto3
 
@@ -162,7 +162,7 @@ defmodule Pb.ConnectResponse do
   field :publicKey, 100, type: :string
 end
 
-defmodule Pb.Ping do
+defmodule Gnat.Streaming.Pb.Ping do
   @moduledoc false
   use Protobuf, syntax: :proto3
 
@@ -174,7 +174,7 @@ defmodule Pb.Ping do
   field :connID, 1, type: :bytes
 end
 
-defmodule Pb.PingResponse do
+defmodule Gnat.Streaming.Pb.PingResponse do
   @moduledoc false
   use Protobuf, syntax: :proto3
 
@@ -186,7 +186,7 @@ defmodule Pb.PingResponse do
   field :error, 1, type: :string
 end
 
-defmodule Pb.SubscriptionRequest do
+defmodule Gnat.Streaming.Pb.SubscriptionRequest do
   @moduledoc false
   use Protobuf, syntax: :proto3
 
@@ -222,12 +222,12 @@ defmodule Pb.SubscriptionRequest do
   field :maxInFlight, 5, type: :int32
   field :ackWaitInSecs, 6, type: :int32
   field :durableName, 7, type: :string
-  field :startPosition, 10, type: Pb.StartPosition, enum: true
+  field :startPosition, 10, type: Gnat.Streaming.Pb.StartPosition, enum: true
   field :startSequence, 11, type: :uint64
   field :startTimeDelta, 12, type: :int64
 end
 
-defmodule Pb.SubscriptionResponse do
+defmodule Gnat.Streaming.Pb.SubscriptionResponse do
   @moduledoc false
   use Protobuf, syntax: :proto3
 
@@ -241,7 +241,7 @@ defmodule Pb.SubscriptionResponse do
   field :error, 3, type: :string
 end
 
-defmodule Pb.UnsubscribeRequest do
+defmodule Gnat.Streaming.Pb.UnsubscribeRequest do
   @moduledoc false
   use Protobuf, syntax: :proto3
 
@@ -259,7 +259,7 @@ defmodule Pb.UnsubscribeRequest do
   field :durableName, 4, type: :string
 end
 
-defmodule Pb.CloseRequest do
+defmodule Gnat.Streaming.Pb.CloseRequest do
   @moduledoc false
   use Protobuf, syntax: :proto3
 
@@ -271,7 +271,7 @@ defmodule Pb.CloseRequest do
   field :clientID, 1, type: :string
 end
 
-defmodule Pb.CloseResponse do
+defmodule Gnat.Streaming.Pb.CloseResponse do
   @moduledoc false
   use Protobuf, syntax: :proto3
 
