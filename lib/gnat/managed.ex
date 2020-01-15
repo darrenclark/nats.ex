@@ -1,5 +1,5 @@
 defmodule Gnat.Managed do
-  @doc """
+  @moduledoc """
 
   ## States
   
@@ -8,15 +8,13 @@ defmodule Gnat.Managed do
     - connection is good
     - pubs/subs/unsubs are sent immediately
 
-  #### `:reconnecting`
-  
-    - not connected, but actively retrying to reconnect
-    - pubs/subs/unsubs are queued up for when we reconnect
-
   """
   @behaviour :gen_statem
 
   require Logger
+  import Record, only: [defrecordp: 2]
+  defrecordp(:sub_data, sid: nil, esid: nil, receiver: nil)
+
 
   def child_spec(init_arg) do
     default = %{
@@ -40,51 +38,57 @@ defmodule Gnat.Managed do
   end
 
   @impl :gen_statem
-  def callback_mode(), do: :handle_event_function
+  def callback_mode(), do: :state_functions
 
   @impl :gen_statem
   def init(opts) do
     connection_settings = opts[:connection_settings] || %{}
 
+    {:ok, gnat} = Gnat.start_link(connection_settings)
+
     data = %{
-      gnat: nil,
+      gnat: gnat,
       subs: :ets.new(:subscriptions, [:private, keypos: 2]),
       connection_settings: Map.new(connection_settings),
       retries: 0
     }
 
-    case Gnat.start_link(connection_settings) do
-      {:ok, gnat} ->
-        {:ok, :connected, %{data | gnat: gnat}}
+    {:ok, :connected, %{data | gnat: gnat}}
+  end
 
-      {:error, reason} ->
-        Logger.error("Failed to connect: #{reason}, retrying...")
-        {:ok, :reconnecting, %{data | retries: 1}}
-        throw :uh_oh
+  def connected({:call, from}, :stop, data) do
+    :gen_statem.call(data.gnat, :stop)
+    {:stop_and_reply, :normal, [{:reply, from, :ok}]}
+  end
+
+  def connected({:call, from}, {:sub, receiver, topic, opts}, data) do
+    # TODO: handle max_messages
+
+    {:ok, sid} = :gen_statem.call(data.gnat, {:sub, self(), topic, opts})
+    esid = :erlang.unique_integer()
+
+    sub = sub_data(sid: sid, esid: esid, receiver: receiver)
+    true = :ets.insert_new(data.subs, sub)
+
+    {:keep_state_and_data, [{:reply, from, {:ok, esid}}]}
+  end
+
+  def connected({:call, from}, {:pub, topic, message, opts}, data) do
+    result = :gen_statem.call(data.gnat, {:pub, topic, message, opts})
+    {:keep_state_and_data, [{:reply, from, result}]}
+  end
+
+  #def connected({:call, from}, request, data) do
+  #  send(data.gnat, {:"$gen_call", from, request})
+  #  :keep_state_and_data
+  #end
+
+  def connected(:info, {:msg, message}, data) do
+    with [sub_data(esid: esid, receiver: pid)] <- :ets.lookup(data.subs, message.sid) do
+      message = {:msg, %{message | sid: esid, gnat: self()}}
+      send(pid, message)
     end
-  catch
-    reason ->
-      {:stop, reason}
-  end
 
-  @impl :gen_statem
-  def handle_event(event, event_data, state, data)
-
-  def handle_event({:call, from}, :stop, :connected, data) do
-    do_call(:stop, data)
-    {:stop_and_reply, :normal, [{:reply, from, :ok}]}
-  end
-
-  def handle_event({:call, from}, :stop, :disconnected, data) do
-    {:stop_and_reply, :normal, [{:reply, from, :ok}]}
-  end
-
-  def handle_event({:call, from}, content, _state, data) do
-    send(data.gnat, {:"$gen_call", from, content})
     :keep_state_and_data
-  end
-
-  defp do_call(request, %{gnat: gnat}) do
-    :gen_statem.call(gnat, request)
   end
 end
