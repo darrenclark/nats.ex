@@ -123,19 +123,16 @@ defmodule Gnat.ManagedTest do
 #    end
 #  end
 #
-#  test "unsubscribing from a topic" do
-#    topic = "testunsub"
-#    {:ok, pid} = Gnat.start_link()
-#    {:ok, sub_ref} = Gnat.sub(pid, self(), topic)
-#    :ok = Gnat.pub(pid, topic, "msg1")
-#    assert_receive {:msg, %{topic: ^topic, body: "msg1"}}, 500
-#    :ok = Gnat.unsub(pid, sub_ref)
-#    :ok = Gnat.pub(pid, topic, "msg2")
-#    receive do
-#      {:msg, %{topic: _topic, body: _body}}=msg -> flunk("Received message after unsubscribe: #{inspect msg}")
-#      after 200 -> :ok
-#    end
-#  end
+  test "unsubscribing from a topic" do
+    topic = "testunsub"
+    {:ok, pid} = Gnat.Managed.start_link()
+    {:ok, sub_ref} = Gnat.sub(pid, self(), topic)
+    :ok = Gnat.pub(pid, topic, "msg1")
+    assert_receive {:msg, %{topic: ^topic, body: "msg1"}}, 500
+    :ok = Gnat.unsub(pid, sub_ref)
+    :ok = Gnat.pub(pid, topic, "msg2")
+    refute_receive {:msg, %{topic: _topic, body: _body}}, 500
+  end
 #
 #  test "unsubscribing from a topic after a maximum number of messages" do
 #    topic = "testunsub_maxmsg"

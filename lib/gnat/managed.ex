@@ -73,6 +73,17 @@ defmodule Gnat.Managed do
     {:keep_state_and_data, [{:reply, from, {:ok, esid}}]}
   end
 
+  def connected({:call, from}, {:unsub, esid, opts}, data) do
+    # TODO: handle max_messages
+
+    with [sub_data(sid: sid)] <- :ets.match_object(data.subs, sub_data(esid: esid, _: :_)) do
+      :gen_statem.call(data.gnat, {:unsub, sid, opts})
+      :ets.delete(data.subs, sid)
+    end
+
+    {:keep_state_and_data, [{:reply, from, :ok}]}
+  end
+
   def connected({:call, from}, {:pub, topic, message, opts}, data) do
     result = :gen_statem.call(data.gnat, {:pub, topic, message, opts})
     {:keep_state_and_data, [{:reply, from, result}]}
