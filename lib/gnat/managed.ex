@@ -13,7 +13,7 @@ defmodule Gnat.Managed do
 
   require Logger
   import Record, only: [defrecordp: 2]
-  defrecordp(:sub_data, sid: nil, esid: nil, receiver: nil)
+  defrecordp(:sub_data, sid: nil, esid: nil, receiver: nil, unsub_after: :infinity)
 
 
   def child_spec(init_arg) do
@@ -62,8 +62,6 @@ defmodule Gnat.Managed do
   end
 
   def connected({:call, from}, {:sub, receiver, topic, opts}, data) do
-    # TODO: handle max_messages
-
     {:ok, sid} = :gen_statem.call(data.gnat, {:sub, self(), topic, opts})
     esid = :erlang.unique_integer()
 
@@ -73,12 +71,18 @@ defmodule Gnat.Managed do
     {:keep_state_and_data, [{:reply, from, {:ok, esid}}]}
   end
 
-  def connected({:call, from}, {:unsub, esid, opts}, data) do
-    # TODO: handle max_messages
+  # TODO: handle unsub from request topics
 
+  def connected({:call, from}, {:unsub, esid, opts}, data) do
     with [sub_data(sid: sid)] <- :ets.match_object(data.subs, sub_data(esid: esid, _: :_)) do
       :gen_statem.call(data.gnat, {:unsub, sid, opts})
-      :ets.delete(data.subs, sid)
+
+      case opts[:max_messages] do
+        nil ->
+          :ets.delete(data.subs, sid)
+        max ->
+          :ets.update_element(data.subs, sid, {sub_data(:unsub_after) + 1, max})
+      end
     end
 
     {:keep_state_and_data, [{:reply, from, :ok}]}
@@ -101,11 +105,29 @@ defmodule Gnat.Managed do
   #end
 
   def connected(:info, {:msg, message}, data) do
-    with [sub_data(esid: esid, receiver: pid)] <- :ets.lookup(data.subs, message.sid) do
-      message = {:msg, %{message | sid: esid, gnat: self()}}
-      send(pid, message)
-    end
+    data.subs
+    |> :ets.lookup(message.sid)
+    |> Enum.each(&handle_message(message, &1, data))
 
     :keep_state_and_data
+  end
+
+  defp handle_message(msg, sub_data(unsub_after: :infinity) = sub, _data) do
+    send_message(msg, sub)
+  end
+
+  defp handle_message(msg, sub_data(sid: sid, unsub_after: 1) = sub, data) do
+    send_message(msg, sub)
+    :ets.delete(data.subs, sid)
+  end
+
+  defp handle_message(msg, sub_data(sid: sid, unsub_after: _) = sub, data) do
+    send_message(msg, sub)
+    :ets.update_counter(data.subs, sid, {sub_data(:unsub_after) + 1, -1})
+  end
+
+  defp send_message(msg, sub_data(esid: esid, receiver: pid)) do
+    message = {:msg, %{msg | sid: esid, gnat: self()}}
+    send(pid, message)
   end
 end
