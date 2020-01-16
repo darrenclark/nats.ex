@@ -71,7 +71,10 @@ defmodule Gnat.Managed do
     {:keep_state_and_data, [{:reply, from, {:ok, esid}}]}
   end
 
-  # TODO: handle unsub from request topics
+  def connected({:call, from}, {:unsub, topic, opts}, data) when is_binary(topic) do
+    result = :gen_statem.call(data.gnat, {:unsub, topic, opts})
+    {:keep_state_and_data, [{:reply, from, result}]}
+  end
 
   def connected({:call, from}, {:unsub, esid, opts}, data) do
     with [sub_data(sid: sid)] <- :ets.match_object(data.subs, sub_data(esid: esid, _: :_)) do
@@ -90,6 +93,11 @@ defmodule Gnat.Managed do
 
   def connected({:call, from}, {:pub, topic, message, opts}, data) do
     result = :gen_statem.call(data.gnat, {:pub, topic, message, opts})
+    {:keep_state_and_data, [{:reply, from, result}]}
+  end
+
+  def connected({:call, from}, {:request, request}, data) do
+    result = :gen_statem.call(data.gnat, {:request, request})
     {:keep_state_and_data, [{:reply, from, result}]}
   end
 
