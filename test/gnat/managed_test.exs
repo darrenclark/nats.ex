@@ -13,59 +13,6 @@ defmodule Gnat.ManagedTest do
     :ok = Gnat.stop(pid)
   end
 
-#  @tag :multi_server
-#  test "connect to a server with user/pass authentication" do
-#    connection_settings = %{
-#      host: "localhost",
-#      port: 4223,
-#      tcp_opts: [:binary],
-#      username: "bob",
-#      password: "alice"
-#    }
-#    {:ok, pid} = Gnat.start_link(connection_settings)
-#    assert Process.alive?(pid)
-#    :ok = Gnat.ping(pid)
-#    :ok = Gnat.stop(pid)
-#  end
-#
-#  @tag :multi_server
-#  test "connect to a server with token authentication" do
-#    connection_settings = %{
-#      host: "localhost",
-#      port: 4226,
-#      tcp_opts: [:binary],
-#      token: "SpecialToken",
-#      auth_required: true
-#    }
-#    {:ok, pid} = Gnat.start_link(connection_settings)
-#    assert Process.alive?(pid)
-#    :ok = Gnat.ping(pid)
-#    :ok = Gnat.stop(pid)
-#  end
-#
-#  @tag :multi_server
-#  test "connet to a server which requires TLS" do
-#    connection_settings = %{port: 4224, tls: true}
-#    {:ok, gnat} = Gnat.start_link(connection_settings)
-#    assert Gnat.ping(gnat) == :ok
-#    assert Gnat.stop(gnat) == :ok
-#  end
-#
-#  @tag :multi_server
-#  test "connect to a server which requires TLS with a client certificate" do
-#    connection_settings = %{
-#      port: 4225,
-#      tls: true,
-#      ssl_opts: [
-#        certfile: "test/fixtures/client-cert.pem",
-#        keyfile: "test/fixtures/client-key.pem",
-#      ],
-#    }
-#    {:ok, gnat} = Gnat.start_link(connection_settings)
-#    assert Gnat.ping(gnat) == :ok
-#    assert Gnat.stop(gnat) == :ok
-#  end
-#
   test "subscribe to topic and receive a message" do
     {:ok, pid} = Gnat.Managed.start_link()
     {:ok, _ref} = Gnat.sub(pid, self(), "test")
@@ -178,6 +125,24 @@ defmodule Gnat.ManagedTest do
       end
     end)
   end
+
+  test "doesnt crash when the connection dies" do
+    IO.inspect(self(), label: "self")
+    proxy = IO.inspect(start_supervised!({SimpleTcpProxy, [42220, 4222]}), label: "proxy")
+    {:ok, pid} = Gnat.Managed.start_link(connection_settings: %{port: 42220}, debug: [:statistics, :trace])
+
+    Process.sleep(1000)
+    IO.inspect(pid, label: "gnat.managed")
+    SimpleTcpProxy.disconnect(proxy)
+    Process.sleep(1000)
+
+    {:ok, _ref} = Gnat.sub(pid, self(), "test")
+    :ok = Gnat.pub(pid, "test", "yo dawg")
+
+    assert_receive {:msg, %{topic: "test", body: "yo dawg", reply_to: nil}}, 1000
+    :ok = Gnat.stop(pid)
+  end
+
 #
 #  test "recording errors from the broker" do
 #    import ExUnit.CaptureLog
@@ -195,4 +160,57 @@ defmodule Gnat.ManagedTest do
 #    {:stop, :timeout} = Gnat.init(connection_settings)
 #    assert_in_delta System.monotonic_time(:millisecond) - start, 200, 10
 #  end
+##  @tag :multi_server
+#  test "connect to a server with user/pass authentication" do
+#    connection_settings = %{
+#      host: "localhost",
+#      port: 4223,
+#      tcp_opts: [:binary],
+#      username: "bob",
+#      password: "alice"
+#    }
+#    {:ok, pid} = Gnat.start_link(connection_settings)
+#    assert Process.alive?(pid)
+#    :ok = Gnat.ping(pid)
+#    :ok = Gnat.stop(pid)
+#  end
+#
+#  @tag :multi_server
+#  test "connect to a server with token authentication" do
+#    connection_settings = %{
+#      host: "localhost",
+#      port: 4226,
+#      tcp_opts: [:binary],
+#      token: "SpecialToken",
+#      auth_required: true
+#    }
+#    {:ok, pid} = Gnat.start_link(connection_settings)
+#    assert Process.alive?(pid)
+#    :ok = Gnat.ping(pid)
+#    :ok = Gnat.stop(pid)
+#  end
+#
+#  @tag :multi_server
+#  test "connet to a server which requires TLS" do
+#    connection_settings = %{port: 4224, tls: true}
+#    {:ok, gnat} = Gnat.start_link(connection_settings)
+#    assert Gnat.ping(gnat) == :ok
+#    assert Gnat.stop(gnat) == :ok
+#  end
+#
+#  @tag :multi_server
+#  test "connect to a server which requires TLS with a client certificate" do
+#    connection_settings = %{
+#      port: 4225,
+#      tls: true,
+#      ssl_opts: [
+#        certfile: "test/fixtures/client-cert.pem",
+#        keyfile: "test/fixtures/client-key.pem",
+#      ],
+#    }
+#    {:ok, gnat} = Gnat.start_link(connection_settings)
+#    assert Gnat.ping(gnat) == :ok
+#    assert Gnat.stop(gnat) == :ok
+#  end
+#
 end

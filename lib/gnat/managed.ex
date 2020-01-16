@@ -38,22 +38,61 @@ defmodule Gnat.Managed do
   end
 
   @impl :gen_statem
-  def callback_mode(), do: :state_functions
+  def callback_mode(), do: [:state_functions, :state_enter]
 
   @impl :gen_statem
   def init(opts) do
+    Process.flag(:trap_exit, true)
+
     connection_settings = opts[:connection_settings] || %{}
 
-    {:ok, gnat} = Gnat.start_link(connection_settings)
-
     data = %{
-      gnat: gnat,
+      gnat: nil,
       subs: :ets.new(:subscriptions, [:private, keypos: 2]),
       connection_settings: Map.new(connection_settings),
       retries: 0
     }
 
-    {:ok, :connected, %{data | gnat: gnat}}
+    # require initial connection - probably got worse issues if we can't connect
+    {:ok, data} = connect(data)
+
+    {:ok, :connected, data}
+  end
+
+  defp connect(data) do
+    case Gnat.start_link(data.connection_settings) do
+      {:ok, gnat} ->
+        IO.inspect(gnat, label: "gnat")
+        {:ok, %{data | gnat: gnat, retries: 0}}
+
+      {:error, reason} ->
+        IO.inspect(reason, label: "gnat :error -> reason")
+        {:error, :reason, %{data | gnat: nil, retries: data.retries + 1}}
+    end
+  end
+
+  def reconnecting(:enter, _previous, data) do
+    duration = data.retries * 1000
+    {:keep_state_and_data, {:state_timeout, duration, :retry}}
+  end
+
+  def reconnecting(:state_timeout, :retry, data) do
+    case connect(data) do
+      {:ok, data} ->
+        {:next_state, :connected, data}
+
+      {:error, _reason, data} ->
+        {:repeat_state, data}
+    end
+  end
+
+  def reconnecting({:call, _from}, _request, _data) do
+    {:keep_state_and_data, :postpone}
+  end
+
+  def connected(:enter, _, _data) do
+    # TODO: sync subscriptions
+    :keep_state_and_data
   end
 
   def connected({:call, from}, :stop, data) do
@@ -62,7 +101,7 @@ defmodule Gnat.Managed do
   end
 
   def connected({:call, from}, {:sub, receiver, topic, opts}, data) do
-    {:ok, sid} = :gen_statem.call(data.gnat, {:sub, self(), topic, opts})
+    {:ok, sid} = try_call(data, {:sub, self(), topic, opts})
     esid = :erlang.unique_integer()
 
     sub = sub_data(sid: sid, esid: esid, receiver: receiver)
@@ -72,7 +111,7 @@ defmodule Gnat.Managed do
   end
 
   def connected({:call, from}, {:unsub, topic, opts}, data) when is_binary(topic) do
-    result = :gen_statem.call(data.gnat, {:unsub, topic, opts})
+    result = try_call(data, {:unsub, topic, opts})
     {:keep_state_and_data, [{:reply, from, result}]}
   end
 
@@ -120,6 +159,14 @@ defmodule Gnat.Managed do
     :keep_state_and_data
   end
 
+  def connected(:info, {:EXIT, gnat, _}, %{gnat: gnat} = data) do
+    {:next_state, :reconnecting, %{data | gnat: nil}}
+  end
+
+  def connected(:info, {:EXIT, _pid, _reason}, _data) do
+    :keep_state_and_data
+  end
+
   defp handle_message(msg, sub_data(unsub_after: :infinity) = sub, _data) do
     send_message(msg, sub)
   end
@@ -137,5 +184,17 @@ defmodule Gnat.Managed do
   defp send_message(msg, sub_data(esid: esid, receiver: pid)) do
     message = {:msg, %{msg | sid: esid, gnat: self()}}
     send(pid, message)
+  end
+
+  defp try_call(data, request) do
+    try do
+      :gen_statem.call(data.gnat, request)
+    catch
+      :exit, {:noproc, _} ->
+        throw {:next_state, :reconnecting, %{data | gnat: nil}, :postpone}
+
+      :exit, reason ->
+        exit(reason)
+    end
   end
 end
