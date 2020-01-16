@@ -150,6 +150,19 @@ defmodule Gnat.ManagedTest do
 #    end
 #  end
 #
+
+  test "active_subscriptions" do
+    topic = "testunsub"
+    {:ok, pid} = Gnat.Managed.start_link()
+    {:ok, sub_ref} = Gnat.sub(pid, self(), topic)
+    {:ok, sub_ref2} = Gnat.sub(pid, self(), topic)
+    assert {:ok, 2} = Gnat.active_subscriptions(pid)
+    :ok = Gnat.unsub(pid, sub_ref2)
+    assert {:ok, 1} = Gnat.active_subscriptions(pid)
+    :ok = Gnat.unsub(pid, sub_ref)
+    assert {:ok, 0} = Gnat.active_subscriptions(pid)
+  end
+
 #  test "request-reply convenience function" do
 #    topic = "req-resp"
 #    {:ok, pid} = Gnat.start_link()

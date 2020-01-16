@@ -89,6 +89,12 @@ defmodule Gnat.Managed do
     {:keep_state_and_data, [{:reply, from, result}]}
   end
 
+  def connected({:call, from}, :active_subscriptions, data) do
+    info = :ets.info(data.subs)
+    result = {:ok, info[:size]}
+    {:keep_state_and_data, [{:reply, from, result}]}
+  end
+
   #def connected({:call, from}, request, data) do
   #  send(data.gnat, {:"$gen_call", from, request})
   #  :keep_state_and_data
