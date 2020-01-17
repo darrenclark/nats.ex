@@ -143,6 +143,23 @@ defmodule Gnat.ManagedTest do
     :ok = Gnat.stop(pid)
   end
 
+  test "subscriptions are recreated on reconnection" do
+    IO.inspect(self(), label: "self")
+    proxy = IO.inspect(start_supervised!({SimpleTcpProxy, [42220, 4222]}), label: "proxy")
+    {:ok, pid} = Gnat.Managed.start_link(connection_settings: %{port: 42220}, debug: [:statistics, :trace])
+    {:ok, _ref} = Gnat.sub(pid, self(), "test")
+
+    #Process.sleep(1000)
+    IO.inspect(pid, label: "gnat.managed")
+    SimpleTcpProxy.disconnect(proxy)
+    #Process.sleep(1000)
+
+    :ok = Gnat.pub(pid, "test", "yo dawg")
+
+    assert_receive {:msg, %{topic: "test", body: "yo dawg", reply_to: nil}}, 1000
+    :ok = Gnat.stop(pid)
+  end
+
 #
 #  test "recording errors from the broker" do
 #    import ExUnit.CaptureLog
