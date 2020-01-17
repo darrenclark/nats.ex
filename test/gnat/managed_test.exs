@@ -151,7 +151,8 @@ defmodule Gnat.ManagedTest do
 
     #Process.sleep(1000)
     IO.inspect(pid, label: "gnat.managed")
-    SimpleTcpProxy.disconnect(proxy)
+    SimpleTcpProxy.set_allow_connection(proxy, false)
+    SimpleTcpProxy.set_allow_connection(proxy, true)
     #Process.sleep(1000)
 
     :ok = Gnat.pub(pid, "test", "yo dawg")

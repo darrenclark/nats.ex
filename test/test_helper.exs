@@ -116,8 +116,8 @@ defmodule SimpleTcpProxy do
     GenServer.start_link(__MODULE__, init_arg, [])
   end
 
-  def disconnect(proxy) do
-    GenServer.call(proxy, :disconnect)
+  def set_allow_connection(proxy, allow?) do
+    GenServer.call(proxy, {:set_allow_connection, allow?})
   end
 
   @impl true
@@ -125,62 +125,85 @@ defmodule SimpleTcpProxy do
     {:ok, socket} = :gen_tcp.listen(listen_port, [:binary, packet: :raw, reuseaddr: true])
 
     state = %{
-      listen_port: listen_port,
-      remote_port: remote_port,
-      socket: socket,
-      inc: nil,
-      out: nil
+      allow?: true,
+      conns: %{}
     }
 
-    send(self(), :accept)
+    this = self()
+    Task.start_link(fn -> accept(this, socket, remote_port) end)
+
     {:ok, state}
   end
 
   @impl true
-  def handle_call(:disconnect, _from, %{inc: nil} = state) do
+  def handle_call({:set_allow_connection, allow?}, _from, %{allow?: allow?} = state) do
     {:reply, :ok, state}
   end
-  def handle_call(:disconnect, _from, state) do
-    :gen_tcp.shutdown(state.out, :read_write)
-    :gen_tcp.shutdown(state.inc, :read_write)
-    send(self(), :accept)
-    {:reply, :ok, state}
+  def handle_call({:set_allow_connection, false}, _from, state) do
+    state.conns
+    |> Enum.each(fn {inc, out} ->
+      :gen_tcp.shutdown(out, :read_write)
+      :gen_tcp.shutdown(inc, :read_write)
+    end)
+
+    {:reply, :ok, %{state | allow?: false, conns: %{}}}
+  end
+  def handle_call({:set_allow_connection, true}, _from, state) do
+    {:reply, :ok, %{state | allow?: true}}
   end
 
   @impl true
-  def handle_info(:accept, %{inc: nil} = state) do
-    IO.puts "ACCEPTING"
-    {:ok, inc} = :gen_tcp.accept(state.socket)
-    IO.puts "CONNECTING"
-    {:ok, out} = :gen_tcp.connect('localhost', state.remote_port, [:binary, packet: :raw])
+  def handle_cast({:new, inc, out}, state) do
+    if state.allow? do
+      conns = Map.put(state.conns, inc, out)
+      {:noreply, %{state | conns: conns}}
+    else
+      :gen_tcp.shutdown(out, :read_write)
+      :gen_tcp.shutdown(inc, :read_write)
+      {:noreply, state}
+    end
+  end
 
-    {:noreply, %{state | inc: inc, out: out}}
-  end
-  def handle_info(:accept, state) do
+  @impl true
+  def handle_info({:tcp, sock, data}, state) do
+    if opposite = opposite_socket(state, sock) do
+      :gen_tcp.send(opposite, data)
+    end
     {:noreply, state}
   end
-  def handle_info({:tcp, inc, data}, %{inc: inc} = state) do
-    :gen_tcp.send(state.out, data)
-    {:noreply, state}
+  def handle_info({:tcp_closed, sock}, state) do
+    if opposite = opposite_socket(state, sock) do
+      :gen_tcp.shutdown(opposite, :read_write)
+      conns = Map.drop(state.conns, [sock, opposite])
+      {:noreply, %{state | conns: conns}}
+    else
+      {:noreply, state}
+    end
   end
-  def handle_info({:tcp, out, data}, %{out: out} = state) do
-    :gen_tcp.send(state.inc, data)
-    {:noreply, state}
+
+  defp accept(proxy, socket, remote_port) do
+    IO.puts "ACCEPTING"
+    {:ok, inc} = :gen_tcp.accept(socket)
+    IO.puts "CONNECTING"
+    {:ok, out} = :gen_tcp.connect('localhost', remote_port, [:binary, packet: :raw])
+    IO.puts "CONNECTED!"
+
+    :ok = :gen_tcp.controlling_process(inc, proxy)
+    :ok = :gen_tcp.controlling_process(out, proxy)
+    GenServer.cast(proxy, {:new, inc, out})
+
+    accept(proxy, socket, remote_port)
   end
-  def handle_info({:tcp, _, _}, state) do
-    {:noreply, state}
-  end
-  def handle_info({:tcp_closed, inc}, %{inc: inc} = state) do
-    :gen_tcp.shutdown(state.out, :read_write)
-    send(self(), :accept)
-    {:noreply, %{state | inc: nil, out: nil}}
-  end
-  def handle_info({:tcp_closed, out}, %{out: out} = state) do
-    :gen_tcp.shutdown(state.inc, :read_write)
-    send(self(), :accept)
-    {:noreply, %{state | inc: nil, out: nil}}
-  end
-  def handle_info({:tcp_closed, _}, state) do
-    {:noreply, state}
+
+  defp opposite_socket(state, socket) do
+    if opposite = Map.get(state.conns, socket) do
+      opposite
+    else
+      state.conns
+      |> Enum.find_value(fn
+        {opposite, ^socket} -> opposite
+        _ -> nil
+      end)
+    end
   end
 end
