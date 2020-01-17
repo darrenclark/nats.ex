@@ -174,6 +174,52 @@ defmodule Gnat.ManagedTest do
     :ok = Gnat.stop(pid)
   end
 
+  test "subscriptions while disconnected are created on reconnection" do
+    proxy = start_supervised!({SimpleTcpProxy, [42222, 4222]})
+    {:ok, pid} = Gnat.Managed.start_link(connection_settings: %{port: 42222}, debug: [:statistics, :trace])
+    SimpleTcpProxy.set_allow_connection(proxy, false)
+
+    {:ok, _ref} = Gnat.sub(pid, self(), "test")
+    :ok = Gnat.pub(pid, "test", "yo dawg")
+
+    SimpleTcpProxy.set_allow_connection(proxy, true)
+
+    assert_receive {:msg, %{topic: "test", body: "yo dawg", reply_to: nil}}, 10_000
+    :ok = Gnat.stop(pid)
+  end
+
+  test "unsubs while disconnected are handled immediately" do
+    proxy = start_supervised!({SimpleTcpProxy, [42223, 4222]})
+    {:ok, pid} = Gnat.Managed.start_link(connection_settings: %{port: 42223}, debug: [:statistics, :trace])
+    SimpleTcpProxy.set_allow_connection(proxy, false)
+
+    {:ok, sid} = Gnat.sub(pid, self(), "test")
+    :ok = Gnat.pub(pid, "test", "yo dawg")
+    :ok = Gnat.unsub(pid, sid)
+
+    SimpleTcpProxy.set_allow_connection(proxy, true)
+
+    refute_receive {:msg, %{topic: "test", body: "yo dawg", reply_to: nil}}, 10_000
+    :ok = Gnat.stop(pid)
+  end
+
+  test "unsubs with max_messages while disconnected are handled correctly" do
+    proxy = start_supervised!({SimpleTcpProxy, [42224, 4222]})
+    {:ok, pid} = Gnat.Managed.start_link(connection_settings: %{port: 42224}, debug: [:statistics, :trace])
+    SimpleTcpProxy.set_allow_connection(proxy, false)
+
+    {:ok, sid} = Gnat.sub(pid, self(), "test")
+    :ok = Gnat.pub(pid, "test", "yo dawg")
+    :ok = Gnat.pub(pid, "test", "yo dawg 2")
+    :ok = Gnat.unsub(pid, sid, max_messages: 1)
+
+    SimpleTcpProxy.set_allow_connection(proxy, true)
+
+    assert_receive {:msg, %{topic: "test", body: "yo dawg", reply_to: nil}}, 10_000
+    refute_receive {:msg, %{topic: "test", body: "yo dawg", reply_to: nil}}, 10_000
+    :ok = Gnat.stop(pid)
+  end
+
 #
 #  test "recording errors from the broker" do
 #    import ExUnit.CaptureLog

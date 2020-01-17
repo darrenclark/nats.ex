@@ -95,6 +95,30 @@ defmodule Gnat.Managed do
     ]
     {:keep_state_and_data, actions}
   end
+  def reconnecting({:call, from}, {:sub, receiver, topic, opts}, data) do
+    esid = :erlang.unique_integer()
+
+    placeholder_sid = make_ref()
+    sub = sub_data(sid: placeholder_sid, esid: esid, receiver: receiver, topic: topic, sub_opts: opts)
+    true = :ets.insert_new(data.subs, sub)
+
+    {:keep_state_and_data, [{:reply, from, {:ok, esid}}]}
+  end
+  def reconnecting({:call, from}, {:unsub, topic, _opts}, _data) when is_binary(topic) do
+    {:keep_state_and_data, [{:reply, from, :ok}]}
+  end
+  def reconnecting({:call, from}, {:unsub, esid, opts}, data) do
+    with [sub_data(sid: sid)] <- :ets.match_object(data.subs, sub_data(esid: esid, _: :_)) do
+      case opts[:max_messages] do
+        nil ->
+          :ets.delete(data.subs, sid)
+        max ->
+          :ets.update_element(data.subs, sid, {sub_data(:unsub_after) + 1, max})
+      end
+    end
+
+    {:keep_state_and_data, [{:reply, from, :ok}]}
+  end
   def reconnecting({:call, _from}, _request, _data) do
     {:keep_state_and_data, :postpone}
   end
@@ -132,7 +156,7 @@ defmodule Gnat.Managed do
 
       case sub_data(new_sub, :unsub_after) do
         :infinity -> :ok
-        count -> try_call(data.gnat, {:unsub, sid, [max_messages: count]})
+        count -> try_call(data, {:unsub, sid, [max_messages: count]})
       end
     end)
 
