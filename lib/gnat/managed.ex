@@ -84,10 +84,32 @@ defmodule Gnat.Managed do
         {:repeat_state, data}
     end
   end
+  def reconnecting({:call, from}, :stop, _data) do
+    {:stop_and_reply, :normal, [{:reply, from, :ok}]}
+  end
+  # TODO: sub, unsub
+  def reconnecting({:call, from}, {:pub, _topic, _message, _opts} = pub, _data) do
+    actions = [
+      {:reply, from, :ok},
+      {:next_event, :internal, pub}
+    ]
+    {:keep_state_and_data, actions}
+  end
   def reconnecting({:call, _from}, _request, _data) do
     {:keep_state_and_data, :postpone}
   end
-  def reconnecting(:info, _request, _data) do
+  def reconnecting(:info, {:msg, message}, data) do
+    # keep forwarding any messages from the previous connection
+    data.subs
+    |> :ets.lookup(message.sid)
+    |> Enum.each(&handle_message(message, &1, data))
+
+    :keep_state_and_data
+  end
+  def reconnecting(:info, _msg, _data) do
+    {:keep_state_and_data, :postpone}
+  end
+  def reconnecting(:internal, _msg, _data) do
     {:keep_state_and_data, :postpone}
   end
 
@@ -176,6 +198,10 @@ defmodule Gnat.Managed do
     {:next_state, :reconnecting, %{data | gnat: nil}}
   end
   def connected(:info, {:EXIT, _pid, _reason}, _data) do
+    :keep_state_and_data
+  end
+  def connected(:internal, {:pub, topic, message, opts}, data) do
+    try_call(data, {:pub, topic, message, opts})
     :keep_state_and_data
   end
 

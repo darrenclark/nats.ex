@@ -161,6 +161,19 @@ defmodule Gnat.ManagedTest do
     :ok = Gnat.stop(pid)
   end
 
+  test "pubs while disconnected are sent on reconnection" do
+    proxy = start_supervised!({SimpleTcpProxy, [42221, 4222]})
+    {:ok, pid} = Gnat.Managed.start_link(connection_settings: %{port: 42221}, debug: [:statistics, :trace])
+    {:ok, _ref} = Gnat.sub(pid, self(), "test")
+    SimpleTcpProxy.set_allow_connection(proxy, false)
+
+    :ok = Gnat.pub(pid, "test", "yo dawg")
+    SimpleTcpProxy.set_allow_connection(proxy, true)
+
+    assert_receive {:msg, %{topic: "test", body: "yo dawg", reply_to: nil}}, 1000
+    :ok = Gnat.stop(pid)
+  end
+
 #
 #  test "recording errors from the broker" do
 #    import ExUnit.CaptureLog
